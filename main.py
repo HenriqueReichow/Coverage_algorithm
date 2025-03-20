@@ -51,12 +51,21 @@ class Utils:
 def load_mesh_and_sample_points(mesh_path, voxel_size=0.4):
     #mesh para pointclouds 
     mesh = o3d.io.read_triangle_mesh(mesh_path)
-    pcd = mesh.sample_points_uniformly(number_of_points=50)
+    pcd = mesh.sample_points_uniformly(number_of_points=500)
     #pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
     return np.asarray(pcd.points)
 
+def update_waypoints(env, waypoints, visited, next_idx):
+    for i, wp in enumerate(waypoints):
+        if i in visited:
+            env.draw_point(list(wp),color= [0, 255, 0], lifetime=2)  # Verde para visitados
+        elif i == next_idx:
+            env.draw_point(list(wp),color= [0, 0, 255], lifetime=2)  # Azul para o próximo destino
+        else:
+            env.draw_point(list(wp), color=[255, 0, 0], lifetime=2)  # vermelho para waypoints normais
+
 ############## metodos de inspecao
-def scaled_inspection_points(points, scale_factor=3.6):
+def scaled_inspection_points(points, scale_factor=3.4):
     center = np.mean(points, axis=0) 
     expanded_points = center + (points - center) * scale_factor  # Expande para fora
     return expanded_points
@@ -73,8 +82,8 @@ def fix_inspection_points(inspection_points): #tanque
     return inspection_points[mask]
 ############## fim metodos de inspecao
 
-def pose_sensor_update(state):  # Atualiza a rotação e posição do ROV
-    pose = state['auv0']['PoseSensor']
+def pose_sensor_update(state, auv):  # Atualiza a rotação e posição do ROV
+    pose = state[auv.name]['PoseSensor']
     rotation_matrix = pose[:3, :3]
     rotation = Rot.from_matrix(rotation_matrix)
     actual_rotation = rotation.as_euler('xyz', degrees=True)
@@ -158,7 +167,7 @@ def check_collision(trajectory , structure_points, error=2):
 
     return np.asarray(new_trajectory)        
 
-def build_inspection_graph(inspection_points, object_points, sensor_range=40.0):
+def build_inspection_graph(inspection_points, object_points, sensor_range=4):
     graph = nx.Graph()
     for i, ponto in enumerate(inspection_points):
         graph.add_node(i, config=ponto)
@@ -183,7 +192,6 @@ def complete_graph(graph, structure_points):
                 dist = np.linalg.norm(p1 - p2)
                 graph.add_edge(nodes[i], nodes[j], weight=dist)
     return graph
-
 
 def plan_trajectory(graph, structure_points):
     graph = complete_graph(graph, structure_points)
@@ -212,12 +220,12 @@ def main():
     #iniciar world holoocean
     waypoints=np.concatenate((trajectory,orientations),axis=1)
     scenario = HoloOceanScenarios.Scenario("test_rgb_camera" ,"64-tank-Map-1", "Dataset",200)
-    auv = HoloOceanVehicles.AUV(id='0',control_scheme=1,location=list(trajectory[0]),rotation=[0,0,0],mission=0,waypoints=waypoints,sonar_model='test4')
+    auv = HoloOceanVehicles.AUV(id='6',control_scheme=1,location=list(trajectory[0]),rotation=[0,0,0],mission=0,waypoints=waypoints,sonar_model='obj1-test2')
     auv.addSonarImaging(configuration= {
                         "RangeBins": 256,
                         "AzimuthBins": 96*2,
                         "RangeMin": 0,
-                        "RangeMax": 4,
+                        "RangeMax": 5,
                         "InitOctreeRange": 50,
                         "Elevation": 10,
                         "Azimuth": 28.8*2,
@@ -259,32 +267,29 @@ def main():
     env = holoocean.make(scenario_cfg=scenario.cfg,verbose=False)
     state = env.tick()
 
-    for loc in trajectory: #desenhar os pontos no world
-        env.draw_point(list(loc),lifetime=0)
-
     env.draw_point(centro,color=[0,255,0],lifetime=0) #centro
     #plot_tour(structure_points,inspection_points,trajectory) #plotar o grafo com matplotlib
 
+    visited= [] 
+    next_idx = 0 
+    update_waypoints(env, trajectory, visited, next_idx)
     i = 0
-    #auv.updateState(state)
-
-    #auv.saveState(state)
     while True: #simulação
-
-        env.act('auv0',np.concatenate((trajectory[i],orientations[i]),axis=None))
+        #update_waypoints(env, trajectory, visited, next_idx)
+        env.act(auv.name,np.concatenate((trajectory[i],orientations[i]),axis=None))
         state = env.tick()
-        if 'ImagingSonar' in state[auv.name]:
-            auv.updateState(state)
-            
-        #auv.updateState(state)
+        # if 'ImagingSonar' in state[auv.name]:
+        #     auv.updateState(state)
         if state[auv.name]["CollisionSensor"]: 
             print('colisao') #funciona
         
-        actual_location, actual_rotation, rotation_matrix = pose_sensor_update(state)
-
-        if np.linalg.norm(actual_location-trajectory[i]) < 0.5 and np.linalg.norm(actual_rotation[2] - orientations[i][2]) < 5 and orientations[i][0] < 0.3 and 'ImagingSonar' in state[auv.name]:
-            #auv.updateState(state)
+        actual_location, actual_rotation, rotation_matrix = pose_sensor_update(state,auv)
+        
+        if np.linalg.norm(actual_location-trajectory[i]) < 0.5 and np.linalg.norm(actual_rotation[2] - orientations[i][2]) < 5 and orientations[i][0] < 2 and 'ImagingSonar' in state[auv.name]:
+            auv.updateState(state)
             print(i, np.concatenate((trajectory[i],orientations[i]),axis=None))
+            visited.append(next_idx)  # Marca o waypoint como visitado
+            next_idx += 1  # Define o próximo
             i += 1
 
         if i + 1 > len(trajectory):
