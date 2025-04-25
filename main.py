@@ -1,61 +1,41 @@
+import holoocean.agents
 import holoocean.command
 import open3d as o3d #mgmatheus
 import numpy as np
 import networkx as nx
 import holoocean
-import sys
+from utils import MeshProcessor
+import route
 from scipy.spatial.transform import Rotation as Rot
 import matplotlib.pyplot as plt
-import os
-import json
+import os, sys, json, csv, pickle
 sys.path.append('/home/lh/Desktop/HoloOceanUtils')
 import HoloOceanVehicles
 import HoloOceanScenarios
 import HoloOceanSensors
+#import rangefinder_pkl_to_npy as pkl_to_npy
 #https://github.com/byu-holoocean/HoloOcean/blob/UE5.3_Prerelease/client/src/holoocean/sensors.py
 #markov decision process
 
-class Utils:
-    def __init__(self):
-        self.azi = 40 #sonar_config['Azimuth']
-        self.minR = 0 #sonar_config['RangeMin']
-        self.maxR = 3 #sonar_config['RangeMax']
-        self.binsR = 512 #sonar_config['RangeBins']
-        self.binsA = 120 #sonar_config['AzimuthBins']
+def spawn_rangefinders(config_of_sonar:dict, auv)->None:
 
-    #def visualize_image_sonar(self): #Cria uma imagem que se atualiza durante a simulação mostrando a visão do sonar
-        plt.ion()
-        self.fig, self.ax = plt.subplots(subplot_kw=dict(projection='polar'), figsize=(8, 5))
-        self.ax.set_theta_zero_location("N")
-
-        self.ax.set_thetamin(-self.azi / 2)
-        self.ax.set_thetamax(self.azi / 2)
-
-        theta = np.linspace(-self.azi / 2, self.azi / 2, self.binsA) * np.pi / 180
-        r = np.linspace(self.minR, self.maxR, self.binsR)
-        T, R = np.meshgrid(theta, r)
-        z = np.zeros_like(T)
+    for i in range(config_of_sonar["Elevation"]): #spawn rangefinder
+        angle_elev = np.linspace(-config_of_sonar["Elevation"]/2,config_of_sonar["Elevation"]/2, config_of_sonar["Elevation"])
+        angle_azi = np.linspace(-config_of_sonar["Azimuth"]/2,config_of_sonar["Azimuth"]/2, config_of_sonar["AzimuthBins"])
+        for j in range(config_of_sonar["AzimuthBins"]):
+            auv.agent['sensors'].append({   "sensor_name":f"RangeFinderSensor_{i}_{j}",
+                                            "sensor_type":"RangeFinderSensor",
+                                            "socket": "SonarSocket",
+                                            "rotation":[0,0,angle_azi[j]],
+                                            "Hz": 20,
+                                            "configuration":{
+                                                "LaserMaxDistance" : 10,
+                                                "LaserCount": 1,
+                                                "LaserAngle": angle_elev[i],
+                                                "LaserDebug": True}})
             
-        plt.grid(False)
-        self.plot = self.ax.pcolormesh(T, R, z, cmap='gray', shading='auto', vmin=0, vmax=1)
-        plt.tight_layout()
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
-    
-    def update_sonar_image(self, state): #Atualiza a imagem do campo de visão do sonar a cada step
-            s = state['auv0']['ImagingSonar']
-            self.plot.set_array(s.ravel())
-            self.fig.canvas.draw()
-            self.fig.canvas.flush_events()
+def update_waypoints(env, waypoints, visited, next_idx, structure_points)->None:
 
-def load_mesh_and_sample_points(mesh_path, voxel_size=0.4):
-    #mesh para pointclouds 
-    mesh = o3d.io.read_triangle_mesh(mesh_path)
-    pcd = mesh.sample_points_uniformly(number_of_points=500)
-    #pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
-    return np.asarray(pcd.points)
-
-def update_waypoints(env, waypoints, visited, next_idx):
     for i, wp in enumerate(waypoints):
         if i in visited:
             env.draw_point(list(wp),color= [0, 255, 0], lifetime=2)  # Verde para visitados
@@ -64,23 +44,8 @@ def update_waypoints(env, waypoints, visited, next_idx):
         else:
             env.draw_point(list(wp), color=[255, 0, 0], lifetime=2)  # vermelho para waypoints normais
 
-############## metodos de inspecao
-def scaled_inspection_points(points, scale_factor=3.4):
-    center = np.mean(points, axis=0) 
-    expanded_points = center + (points - center) * scale_factor  # Expande para fora
-    return expanded_points
-
-def fix_inspection_points(inspection_points): #tanque
-    inspection_points = np.asarray(inspection_points)
-    x_min,x_max = -2.5, 2.5
-    y_min,y_max = -2.5, 2.5
-    z_min,z_max = -4.5, -0.2
-    mask = (
-        (inspection_points[:, 0] >= x_min) & (inspection_points[:, 0] <= x_max) &
-        (inspection_points[:, 1] >= y_min) & (inspection_points[:, 1] <= y_max) &
-        (inspection_points[:, 2] >= z_min) & (inspection_points[:, 2] <= z_max))
-    return inspection_points[mask]
-############## fim metodos de inspecao
+    for insp in structure_points:
+        env.draw_point(list(insp), [0,50,255])
 
 def pose_sensor_update(state, auv):  # Atualiza a rotação e posição do ROV
     pose = state[auv.name]['PoseSensor']
@@ -90,218 +55,166 @@ def pose_sensor_update(state, auv):  # Atualiza a rotação e posição do ROV
     actual_location = pose[:3, 3]
     return actual_location, actual_rotation, rotation_matrix
 
-def calculate_orientation(trajectory, center):
-    list_of_orientations = []
-    yaw_inicial = 0
+def save_data_rangefinder(pickle_dir, config):
+    for i,pickle_file in enumerate(pickle_dir):
+        if pickle_file.endswith(".pkl"):
+            if not os.path.exists("/home/lh/Desktop/Coverage_algorithm/states_npy"):
+                os.mkdir("/home/lh/Desktop/Coverage_algorithm/states_npy")
+            convert_pickle_to_npy(pickle_file, f"/home/lh/Desktop/Coverage_algorithm/states_npy/{i}.npy", config=config)
 
-    for i,point in enumerate(trajectory):
-        x,y,_ = point
-        yaw_desejado = np.degrees(np.arctan2(center[1] - y, center[0] - x))
+def translate_rangefinder_data(state, auv, config, structure_points, env, lifetime=10):
+    loc, rot, _ = pose_sensor_update(state, auv)
 
-        delta_z = trajectory[i][2] - center[2]
-        pitch_desejado = np.degrees(np.arcsin(delta_z / np.linalg.norm(trajectory[i] - center)))
+    range_matrix = np.zeros((config["Elevation"], config["AzimuthBins"]))
 
-        if pitch_desejado > 180:
-            pitch_desejado -= 360
-        elif pitch_desejado < -180:
-            pitch_desejado += 360
+    for i in range(config["Elevation"]):
+        for j in range(config["AzimuthBins"]):
+            key = f"RangeFinderSensor_{i}_{j}"
+            if key in state[auv.name]:
+                range_matrix[i, j] = state[auv.name][key][0]
 
-        heading = yaw_desejado - yaw_inicial
-        if heading > 180:
-                heading -= 360
-        elif heading < -180:
-                heading += 360
-        list_of_orientations.append([0,pitch_desejado,heading])
-    
-    return list_of_orientations
+    elevacoes = np.radians(np.linspace(-config["Elevation"]/2, config["Elevation"]/2, config["Elevation"]))
+    azimutes = np.radians(np.linspace((-config["Azimuth"]/2)+rot[2], (config["Azimuth"]/2)+rot[2], config["AzimuthBins"]))
 
-def is_visible(q, s, sensor_range=10.0):
-    return np.linalg.norm(q - s) <= sensor_range
+    ele, azi = np.meshgrid(elevacoes, azimutes, indexing="ij")
 
-def plot_tour(structure_points,inspection_points,trajectory):
-    figure = plt.figure()
-    ax = figure.add_subplot(111,projection="3d")
-    ax.scatter(structure_points[:, 0], structure_points[:, 1], structure_points[:, 2], c='blue', marker='o', s=2, label='Objeto')
+    x = range_matrix * np.cos(ele) * np.cos(azi) + loc[0]
+    y = range_matrix * np.cos(ele) * np.sin(azi) + loc[1]
+    z = range_matrix * np.sin(ele) + loc[2]
 
-    ax.scatter(inspection_points[:, 0], inspection_points[:, 1], inspection_points[:, 2], c='red', marker='.', label='Inspeção')
-    trajectory = np.array(trajectory)
-    ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], c='green', label='Trajetória')
-   
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    ax.legend()
-    plt.show()
+    mask = range_matrix < 9
+    coords = np.column_stack((x[mask], y[mask], z[mask]))
 
-def point_in_obj(point, structure_points, error=2):
-    xmax = np.max(structure_points[:,0]) + error
-    xmin = np.min(structure_points[:,0]) - error
-    ymax = np.max(structure_points[:,1]) + error
-    ymin = np.min(structure_points[:,1]) - error
-    zmax = np.max(structure_points[:,2]) + error
-    zmin = np.min(structure_points[:,2]) - error
-    if (point[0] <= xmax and point[0] >= xmin) and (point[1] <= ymax and point[1] >= ymin) and (point[2] <= zmax and point[2] >= zmin):
-        return True
+    for coord in coords:
+        env.draw_point(list(coord),color=[100,100,100],lifetime=lifetime)
+    index = []
+    for i, point in enumerate(structure_points):
+        for coord in coords:
+            if np.linalg.norm(point - coord) <= 0.2:
+                index.append(i)
+
+    structure_points = np.delete(structure_points, sorted(index, reverse=True), axis=0)
+
+    if len(structure_points) == 0:
+        print("O objeto foi totalmente coberto")
     else:
-        return False
+        print(f"Faltaram {len(structure_points)} pontos para cobertura total!")
 
-def segment_intersects_obj(p1, p2, structure_points, error=2):
-    p1 = np.array(p1)
-    p2 = np.array(p2)
-    for i in np.linspace(0, 1, num=1000):
-        interpolated_point = (1 - i) * np.array(p1) + i * np.array(p2)
-        if point_in_obj(interpolated_point, structure_points, error):
-            return True
-    return False
+    return structure_points
 
-def check_collision(trajectory , structure_points, error=2):
-    #verifica se os pontos da trajectory estao dentro do objeto
-    #verifica se o deslocamento entre p1 e p2 intercepta o objeto
-    #retorna uma nova trajetoria sem colisoes
-    new_trajectory = []
-    for i,point in enumerate(trajectory):
-        if i < len(trajectory)-1:
-            if not point_in_obj(point, structure_points, error): 
-                if not segment_intersects_obj(point, trajectory[i+1], structure_points, error=2):
-                    new_trajectory.append(point)
+def convert_pickle_to_npy(pickle_file, save_path, config):
+    with open(pickle_file, "rb") as file:
+        state = pickle.load(file)
 
-    return np.asarray(new_trajectory)        
+    range_matrix = np.zeros((config["Elevation"], config["AzimuthBins"]))
 
-def build_inspection_graph(inspection_points, object_points, sensor_range=4):
-    graph = nx.Graph()
-    for i, ponto in enumerate(inspection_points):
-        graph.add_node(i, config=ponto)
-        for j, obj in enumerate(object_points):
-            if is_visible(ponto, obj, sensor_range) and segment_intersects_obj(ponto, obj, object_points):
-                dist = np.linalg.norm(np.array(ponto) - np.array(obj))
-                graph.add_edge(i, j, weight=dist)  #Adiciona um peso com base na distância
-    return graph
+    for i in range(config["Elevation"]):
+        for j in range(config["AzimuthBins"]):
+            if f"RangeFinderSensor_{i}_{j}" in state:
+                print("state ",state[f"RangeFinderSensor_{i}_{j}"][0])
+                range_matrix[i, j] = state[f"RangeFinderSensor_{i}_{j}"][0]
 
-def complete_graph(graph, structure_points):
-    nodes = list(graph.nodes)
-    for i in range(len(nodes)):
-        for j in range(i + 1, len(nodes)):
-            if not graph.has_edge(nodes[i], nodes[j]) and not segment_intersects_obj(nodes[i], nodes[j], structure_points):
-                p1 = np.array(graph.nodes[nodes[i]]["config"])
-                p2 = np.array(graph.nodes[nodes[j]]["config"])
-
-                # Verificar se p1 e p2 têm 3 dimensões
-                if p1.shape != (3,) or p2.shape != (3,):
-                    raise ValueError(f"Os pontos nos nós {nodes[i]} e {nodes[j]} não têm 3 dimensões.")
-                
-                dist = np.linalg.norm(p1 - p2)
-                graph.add_edge(nodes[i], nodes[j], weight=dist)
-    return graph
-
-def plan_trajectory(graph, structure_points):
-    graph = complete_graph(graph, structure_points)
-    path = list(nx.approximation.threshold_accepting_tsp(graph, "greedy", weight="weight"))
-    return [graph.nodes[n]["config"] for n in path]
-
+    np.save(save_path, range_matrix)
+    print(f"Arquivo salvo em: {save_path}")
+  
 def main():
-    mesh = "/home/lh/Documents/Ground-Truth/stl/Wedge_A.stl"
-    structure_points = load_mesh_and_sample_points(mesh) 
-    
-    ############################# - ajustar o objeto no world
-    angle = np.radians(90)
-    structure_points = np.dot(structure_points,[[np.cos(angle),-np.sin(angle),0],[np.sin(angle), np.cos(angle), 0], [0,0,1]])
-    for points in structure_points: #temporario define a posicao da mesh no world
-         points[2] = points[2] - 2.5
-    centro = [0, 0,-2]
-    ############################# - ajustar o objeto no world
+        #for k in range(40):
+        obj_id = 0
+        structure_points = MeshProcessor(obj_id).config_obj_in_world()
 
-    #calculo da trajetoria do Rov
-    inspection_points = scaled_inspection_points(structure_points)
-    inspection_points = fix_inspection_points(inspection_points) #manter os pontos dentro do tanque
-    graph = build_inspection_graph(inspection_points, structure_points)
-    trajectory = plan_trajectory(graph, structure_points)
-    orientations = calculate_orientation(trajectory, centro)
+        traj = route.TrajectoryPlanner(structure_points) #planejar a trajetoria
+        waypoints, trajectory = traj.plan_waypoints(plot_tour=True,obj_id=obj_id)
+        centro = traj.center
 
-    #iniciar world holoocean
-    waypoints=np.concatenate((trajectory,orientations),axis=1)
-    scenario = HoloOceanScenarios.Scenario("test_rgb_camera" ,"64-tank-Map-1", "Dataset",200)
-    auv = HoloOceanVehicles.AUV(id='6',control_scheme=1,location=list(trajectory[0]),rotation=[0,0,0],mission=0,waypoints=waypoints,sonar_model='obj1-test2')
-    auv.addSonarImaging(configuration= {
-                        "RangeBins": 256,
-                        "AzimuthBins": 96*2,
-                        "RangeMin": 0,
-                        "RangeMax": 5,
-                        "InitOctreeRange": 50,
-                        "Elevation": 10,
-                        "Azimuth": 28.8*2,
-                        "AzimuthStreaks": -1,
-                        "ScaleNoise": True,
-                        "AddSigma": 0.15,
-                        "MultSigma": 0.2,
-                        "RangeSigma": 0.0,
-                        "MultiPath": True,
-						"ViewOctree": -1,
-                        "ViewRegion": True
-                    })
-                        
-                        # {
-                        #         "RangeBins": 256,
-                        #         "AzimuthBins": 256,
-                        #         "RangeMin": 0,
-                        #         "RangeMax": 5,
-                        #         "InitOctreeRange": 50,
-                        #         "Elevation": 10,
-                        #         "Azimuth": 60,
-                        #         "AzimuthStreaks": -1,
-                        #         "ScaleNoise": True,
-                        #         "AddSigma": 0.15,
-                        #         "MultSigma": 0.2,
-                        #         "RangeSigma": 0.1,
-                        #         "MultiPath": True,
-                                
-                        #     })
+        #iniciar world holoocean .json
+        scenario = HoloOceanScenarios.Scenario("__" ,"64-tank-Map-1", "Dataset", 200)
 
+        #auv = HoloOceanVehicles.AUV(id='0',control_scheme=1,location=list(trajectory[0]),rotation=[0,0,0],mission=1,waypoints=waypoints,sonar_model='obj'+str(obj_id))
+        auv = HoloOceanVehicles.SphereAgent(id='1',control_scheme=0,location=list(trajectory[0]),rotation=list(waypoints[0,3:]),mission=1,waypoints=waypoints,sonar_model='obj'+str(obj_id))
+        config={
+                    "RangeBins": 256,
+                    "AzimuthBins": 192,
+                    "RangeMin": 0,
+                    "RangeMax": 5,
+                    "InitOctreeRange": 50,
+                    "Elevation": 20,
+                    "Azimuth": 60,
+                    "AzimuthStreaks": -1,
+                    "ScaleNoise": True,
+                    "AddSigma": 0.15,
+                    "MultSigma": 0.2,
+                    "RangeSigma": 0.0,
+                    "MultiPath": True,
+                    "ViewOctree": -1,
+                    "ViewRegion": True}
+        
+        #spawn_rangefinders(config, auv)
+        auv.addSonarImaging(configuration = config)
+        auv.imageViwer()
+        auv.addSensor("PoseSensor","SonarSocket")
+        auv.addSensor('LocationSensor',"SonarSocket")
+        auv.addSensor('RotationSensor',"SonarSocket")
+        auv.addSensor('CollisionSensor','Origin')
+        scenario.addAgent(auv.agent)
 
-    auv.addSensor("PoseSensor","SonarSocket")
-    auv.addSensor('LocationSensor',"Origin")
-    auv.addSensor('RotationSensor',"Origin")
-    auv.addSensor('CollisionSensor','Origin')
-    auv.imageViwer()
-    scenario.addAgent(auv.agent)
-
-    env = holoocean.make(scenario_cfg=scenario.cfg,verbose=False)
-    state = env.tick()
-
-    env.draw_point(centro,color=[0,255,0],lifetime=0) #centro
-    #plot_tour(structure_points,inspection_points,trajectory) #plotar o grafo com matplotlib
-
-    visited= [] 
-    next_idx = 0 
-    update_waypoints(env, trajectory, visited, next_idx)
-    i = 0
-    while True: #simulação
-        #update_waypoints(env, trajectory, visited, next_idx)
-        env.act(auv.name,np.concatenate((trajectory[i],orientations[i]),axis=None))
+        #iniciar a simulacao 
+        env = holoocean.make(scenario_cfg=scenario.cfg,verbose=False)
         state = env.tick()
-        # if 'ImagingSonar' in state[auv.name]:
-        #     auv.updateState(state)
-        if state[auv.name]["CollisionSensor"]: 
-            print('colisao') #funciona
-        
-        actual_location, actual_rotation, rotation_matrix = pose_sensor_update(state,auv)
-        
-        if np.linalg.norm(actual_location-trajectory[i]) < 0.5 and np.linalg.norm(actual_rotation[2] - orientations[i][2]) < 5 and orientations[i][0] < 2 and 'ImagingSonar' in state[auv.name]:
-            auv.updateState(state)
-            print(i, np.concatenate((trajectory[i],orientations[i]),axis=None))
-            visited.append(next_idx)  # Marca o waypoint como visitado
-            next_idx += 1  # Define o próximo
-            i += 1
+        env.draw_point(list(centro),color=[0,255,255],lifetime=0) #centro
+        #env.move_viewport(waypoints[0,:3],waypoints[0,3:])
 
-        if i + 1 > len(trajectory):
-            print("Fim da missão!")
-            os.system("killall -e Holodeck")
+        visited= [] 
+        next_idx = 0 
+        coord_temp = structure_points
+
+        while True:
+            while next_idx < len(waypoints):
+                state = env.tick()
+                if "ImagingSonar" in state[auv.name]: #and 'RangeFinderSensor_0_0' in state[auv.name]: 
+                    # if state[auv.name]["CollisionSensor"]: #testa a colisao e caso afirmativo encerra a simulacao
+                    #     print("Colisao detectada, cancelando missão...")
+                    #     os.system("killall -e Holodeck")
+                    #     break
+
+                    update_waypoints(env,trajectory,visited,next_idx,coord_temp)
+                    auv.updateState(state)
+
+                    coord_temp = translate_rangefinder_data(state,auv,config,coord_temp,env) 
+                    traj.saveState(auv, state, obj_id) #deixar sempre ativo - salva em pkl
+                    print(next_idx, waypoints[next_idx])
+
+                    env.agents[auv.name].teleport(waypoints[next_idx,:3], waypoints[next_idx,3:])
+                    visited.append(next_idx)
+                    next_idx += 1
             break
+        
+        # while True: #simulação
+        #     update_waypoints(env, trajectory, visited, next_idx, coord_temp)
+        #     env.act(auv.name,waypoints[next_idx])
+        #     state = env.tick()
+        #     if state[auv.name]["CollisionSensor"]: #testa a colisao e caso afirmativo encerra a simulacao
+        #         print("Colisao detectada, cancelando missão...")
+        #         os.system("killall -e Holodeck")
+        #         break
+        #     actual_location, actual_rotation, _ = pose_sensor_update(state,auv)
+            
+
+        #     if np.linalg.norm(actual_location-trajectory[next_idx]) < 0.5 and np.linalg.norm(actual_rotation[2] - waypoints[next_idx][5]) < 7 and waypoints[next_idx][3] < 3 and "RangeFinderSensor_0_0" in state[auv.name]: #and 'ImagingSonar' in state[auv.name]:
+        #         coord_temp = translate_rangefinder_data(state,auv,config,coord_temp,env)
+        #         traj.saveState(auv, state, obj_id) #deixar sempre ativo - salva em pkl
+        #         print(next_idx, waypoints[next_idx])
+        #         #auv.updateState(state)
+        #         visited.append(next_idx)
+        #         next_idx += 1
+
+        #     if next_idx + 1 >= len(trajectory): #fim da missao
+        #         print("Fim da missão!")
+        #         os.system("killall -e Holodeck")
+        #         break
 
 if __name__ == "__main__":
     main()
 
-#testar tudo e deixar funcional 100%
-#mudar de cor quando ele passar por um waypoint
 
 # potential fields
 # a estrela e dijkstra
@@ -313,3 +226,10 @@ if __name__ == "__main__":
 
 # salvar os states
 # salvar no formato do dataset do bomba
+
+# ler todas as 3000 casas e criar csv com os pontos junto com as meshs 
+# diretorio e ponto
+
+#unet e aprender spbre ia e treinamento (aulas do guerra)
+#mexer com o pitch e coisas relacionadas
+# spawnar o rov em cada ponto dos waypoints e pegar os dados
