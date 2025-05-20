@@ -12,11 +12,9 @@ import HoloOceanSensors
 #import rangefinder_pkl_to_npy as pkl_to_npy
 #https://github.com/byu-holoocean/HoloOcean/blob/UE5.3_Prerelease/client/src/holoocean/sensors.py
 #markov decision process
-
-# def simulation_all_objects():
      
 def main():
-    for k in range(22,25):
+    for k in range(1):
         obj_id = k
         structure_points = utils.MeshProcessor(obj_id).config_obj_in_world()
 
@@ -47,8 +45,10 @@ def main():
                     "ViewRegion": True,
                     "ViewOctree": True}
         
-        # utils.spawn_rangefinders(config, auv)
-        auv.addSonarImaging(configuration = config)
+        #utils.spawn_rangefinders(config, auv)
+        #auv.addSonarImaging(configuration = config)
+        
+        auv.addSonarGT([0,0,0])
         auv.imageViwer()
         auv.addSensor("PoseSensor","SonarSocket")
         auv.addSensor('LocationSensor',"SonarSocket")
@@ -66,33 +66,30 @@ def main():
         next_idx = 0 
         coord_temp = structure_points
 
-        while True:
-            while next_idx < len(waypoints):
-                state = env.tick()
-                if "ImagingSonar" in state[auv.name]: #and 'RangeFinderSensor_0_0' in state[auv.name]: 
-                    if state[auv.name]["CollisionSensor"]: #testa a colisao e caso afirmativo encerra a simulacao
-                        print("Colisao detectada, cancelando missão...")
-                        os.system("killall -e Holodeck")
-                        break
+        while next_idx < len(waypoints):
+            state = env.tick()
+            if '0 0' in state[auv.name]: 
+                if state[auv.name]["CollisionSensor"]: #testa a colisao e caso afirmativo encerra a simulacao
+                    print("Colisao detectada, cancelando missão...")
+                    os.system("killall -e Holodeck")
+                    break
 
-                    utils.update_waypoints(env,trajectory,visited,next_idx,coord_temp)
-                    auv.updateState(state)
+                utils.update_waypoints(env,trajectory,visited,next_idx,coord_temp)
+                #auv.updateState(state)
+                auv.saveSonarGT(state)
+                coord_temp = utils.translate_rangefinder_data(state,auv,config,coord_temp,env) 
 
-                    coord_temp = utils.translate_rangefinder_data(state,auv,config,coord_temp,env) 
-                    traj.saveState(auv, state, obj_id) #deixar sempre ativo - salva em pkl
-                    print(next_idx, waypoints[next_idx])
+                traj.saveState(auv, state, obj_id) #deixar sempre ativo - salva em pkl
 
-                    env.agents[auv.name].teleport(waypoints[next_idx,:3], waypoints[next_idx,3:])
-                    visited.append(next_idx)
-                    next_idx += 1
-            
-            break
+                print(next_idx, waypoints[next_idx])
+
+                env.agents[auv.name].teleport(waypoints[next_idx,:3], waypoints[next_idx,3:])
+
+                visited.append(next_idx)
+                next_idx += 1
 
 if __name__ == "__main__":
     main()
-
-
-
 
         # while True: #simulação
         #     update_waypoints(env, trajectory, visited, next_idx, coord_temp)

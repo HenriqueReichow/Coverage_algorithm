@@ -15,13 +15,13 @@ class TrajectoryPlanner:
         self.counter = 0
 
     def point_in_obj(self, point, error=2.0):
+        #criando uma bounding box 
         xmax = np.max(self.mesh_points[:,0]) + 2.5
         xmin = np.min(self.mesh_points[:,0]) - 2.5
         ymax = np.max(self.mesh_points[:,1]) + 2.5
         ymin = np.min(self.mesh_points[:,1]) - 2.5
         zmax = np.max(self.mesh_points[:,2]) + 2.5
         zmin = np.min(self.mesh_points[:,2]) - 2.5
-        #print(point,"here")
         if (point[0] <= xmax and point[0] >= xmin) and (point[1] <= ymax and point[1] >= ymin) and (point[2] <= zmax and point[2] >= zmin):
             return True
         else:
