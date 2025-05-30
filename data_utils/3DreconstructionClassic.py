@@ -27,7 +27,7 @@ def rotation(roll, pitch, yaw):
         R = (np.dot(R_yaw, np.dot(R_pitch, R_roll))).T
         return R 
 
-def matrix2xyz(matrix_path='/home/lh/Desktop/Coverage_algorithm/coverage-mission-1-data/Sonar-Dataset-mission-1-obj0/1-sphere-0-data/Raw-data',meta_data="/home/lh/Desktop/Coverage_algorithm/coverage-mission-1-data/Sonar-Dataset-mission-1-obj0/1-sphere-0-data/Meta-data"):
+def matrix2xyz(matrix_path='/home/lh/Desktop/Coverage_algorithm/Sonar-Dataset-mission-1-obj0/1-sphere-0-data/Raw-data',meta_data="/home/lh/Desktop/Coverage_algorithm/Sonar-Dataset-mission-1-obj0/1-sphere-0-data/Meta-data"):
         all_coords = []
         i =12
         #for i in range(101):

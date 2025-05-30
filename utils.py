@@ -4,8 +4,8 @@ from scipy.spatial.transform import Rotation as Rot
 import os, csv, pickle
 
 class MeshProcessor:
-    def __init__(self, obj_id, csv_path="/home/lh/Desktop/Coverage_algorithm/obj_locations/mission1.csv", ground_truth_path="/home/lh/Documents/Ground-Truth/stl", save_pcd:bool=False, number_of_points:int=100):
-        self.csv_path = csv_path
+    def __init__(self, mission, obj_id, csv_path=f"/home/lh/Desktop/Coverage_algorithm/obj_locations/", ground_truth_path="/home/lh/Documents/Ground-Truth/stl", save_pcd:bool=False, number_of_points:int=100):
+        self.csv_path = csv_path+f"mission{mission}.csv"
         self.obj_id = obj_id
         self.ground_truth_path = ground_truth_path
         self.save_pcd = save_pcd
@@ -74,18 +74,23 @@ def spawn_rangefinders(config_of_sonar:dict, auv)->None:
                                                 "LaserAngle": angle_elev[i],
                                                 "LaserDebug": True}})
             
-def update_waypoints(env, waypoints, visited, next_idx, structure_points)->None:
+# def update_waypoints(env, waypoints, visited, next_idx, structure_points,life=2)->None:
+
+#     for i, wp in enumerate(waypoints):
+#         if i in visited:
+#             env.draw_point(list(wp),color= [0, 255, 0], lifetime=life)  # Verde para visitados
+#         elif i == next_idx:
+#             env.draw_point(list(wp),color= [0, 0, 255], lifetime=life)  # Azul para o próximo destino
+#         else:
+#             env.draw_point(list(wp), color=[255, 0, 0], lifetime=life)  # vermelho para waypoints normais
+
+#     for insp in structure_points:
+#         env.draw_point(list(insp), [0,50,255])
+
+def update_waypoints(env, waypoints,life=0)->None:
 
     for i, wp in enumerate(waypoints):
-        if i in visited:
-            env.draw_point(list(wp),color= [0, 255, 0], lifetime=2)  # Verde para visitados
-        elif i == next_idx:
-            env.draw_point(list(wp),color= [0, 0, 255], lifetime=2)  # Azul para o próximo destino
-        else:
-            env.draw_point(list(wp), color=[255, 0, 0], lifetime=2)  # vermelho para waypoints normais
-
-    for insp in structure_points:
-        env.draw_point(list(insp), [0,50,255])
+        env.draw_point(list(wp),color= [255, 255, 0], lifetime=0)  # Verde para visitados
 
 def pose_sensor_update(state, auv):  # Atualiza a rotação e posição do ROV
     pose = state[auv.name]['PoseSensor']
