@@ -2,6 +2,7 @@ import sys
 import gc
 import os
 import holoocean
+import numpy as np
 import route, utils
 import matplotlib.pyplot as plt
 sys.path.append('/home/lh/Desktop/HoloOceanUtils')
@@ -11,7 +12,7 @@ import json
 
 def run_simulation(k):
     obj_id = k
-    mission = 2
+    mission = 1
     structure_points = utils.MeshProcessor(obj_id=obj_id, mission=mission).config_obj_in_world()
     traj = route.TrajectoryPlanner(mesh_points=structure_points, mission=mission, obj_id=obj_id)
     waypoints, trajectory = traj.plan_waypoints(plot_tour=False, obj_id=obj_id)
@@ -20,7 +21,7 @@ def run_simulation(k):
     scenario = HoloOceanScenarios.Scenario("__", f"64-tank-Map-{mission}", "DatasetSonar", 200)
     auv = HoloOceanVehicles.SphereAgent(
         id='1',
-        root=f"coverage-mission-{mission}-data",
+        root=f"coverage-mission-{mission}-data-mv",
         control_scheme=0,
         location=list(trajectory[0]),
         rotation=list(waypoints[0, 3:]),
@@ -44,20 +45,33 @@ def run_simulation(k):
     env.move_viewport([centro[0], centro[1], centro[2] + 7], [0, 270, 0])
     state = env.tick()
 
+    # No início do seu script, ou onde as variáveis globais/constantes são definidas
+    pitch_angles_mv = [-10.0, 0.0, 10.0]
     next_idx = 0
-    #auv.counter = 0
+    auv.counter = 0
     #utils.update_waypoints(env, trajectory)
 
     while next_idx < len(waypoints):
-        state = env.tick()
-        if "ImagingSonar" in state[auv.name] and "0 0" in state[auv.name]:
-            print(f"[Simulação {k}] Waypoint {next_idx}")
-            env.agents[auv.name].teleport(waypoints[next_idx, :3], waypoints[next_idx, 3:])
-            auv.updateState(state)
-            next_idx += 1
-            #auv.counter += 1
-            del state
-            gc.collect()
+        current_waypoint_pos = waypoints[next_idx, :3]
+        current_waypoint_ori = waypoints[next_idx, 3:]
+
+        for i,pitch in enumerate(pitch_angles_mv):
+            new_ori = list([current_waypoint_ori[0],current_waypoint_ori[1]+pitch,current_waypoint_ori[2]])
+            env.agents[auv.name].teleport(current_waypoint_pos, new_ori)
+            state = env.tick()
+
+            while True:
+                if "ImagingSonar" in state[auv.name] and "0 0" in state[auv.name]:
+                    print(f"[Simulação {k}] Waypoint {next_idx} - Pitch {i}")
+                    auv.updateState(state)
+                    auv.counter += 1
+                    del state
+                    gc.collect()
+                    break
+                else:
+                    state = env.tick()
+
+        next_idx += 1
 
     try:
         env.close()

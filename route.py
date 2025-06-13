@@ -51,23 +51,19 @@ class TrajectoryPlanner:
         center_spacing: distância entre os centros dos tanques (em metros)
         half_size: metade do tamanho do lado do tanque (em metros)
         """
-        #coordenadas de linha e coluna na grade 8x8
-        row = self.obj_id // 8  #linha (de baixo pra cima)
-        col = self.obj_id % 8 #coluna (da esquerda pra direita)
+        row = self.obj_id // 8
+        col = self.obj_id % 8
 
         #posição do centro do tanque
         center_x = col * center_spacing
         center_y = row * center_spacing
 
-        #limites(expansão de half_size a partir do centro)
         x_min = center_x - half_size
         x_max = center_x + half_size
         y_max = center_y - half_size
         y_min = center_y + half_size 
 
         return (x_min, x_max, -y_min, -y_max), (center_x, center_y)
-
-
 
     def fix_inspection_points(self): #tanque #mission1 apenas
         #corrige os pontos fora do limite do tanque
@@ -97,11 +93,6 @@ class TrajectoryPlanner:
 
             self.inspection_points[i] = [x, y, z]
 
-        # mask = (
-        #     (self.inspection_points[:, 0] >= x_min) & (self.inspection_points[:, 0] <= x_max) &
-        #     (self.inspection_points[:, 1] >= y_min) & (self.inspection_points[:, 1] <= y_max) &
-        #     (self.inspection_points[:, 2] >= z_min) & (self.inspection_points[:, 2] <= z_max))
-        # self.inspection_points = self.inspection_points[mask]
         return self.inspection_points
         
 

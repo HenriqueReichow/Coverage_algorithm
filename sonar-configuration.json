@@ -1,0 +1,35 @@
+{
+    "P900":{
+        "RangeBins":394,
+        "AzimuthBins":768,
+        "RangeMin": 0.5,
+        "RangeMax": 10,
+        "InitOctreeRange":20,
+        "Elevation": 20,
+        "Azimuth": 130,
+        "AzimuthStreaks": -1,
+        "ScaleNoise": true,
+        "AddSigma": 0.05,
+        "MultSigma": 0.05,
+        "RangeSigma": 0.05,
+        "MultiPath": true,
+        "ViewRegion": false,
+        "ViewOctree": -1},
+
+    "Aris3000": {
+        "RangeBins": 512,
+        "AzimuthBins": 96,
+        "RangeMin": 0,
+        "RangeMax": 8,
+        "InitOctreeRange": 20,
+        "Elevation": 28,
+        "Azimuth": 28.8,
+        "AzimuthStreaks": -1,
+        "ScaleNoise": true,
+        "AddSigma": 0.15,
+        "MultSigma": 0.2,
+        "RangeSigma": 0.0,
+        "MultiPath": true,
+        "ViewRegion": true,
+	    "ViewOctree": -1}
+}
