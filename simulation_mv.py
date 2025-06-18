@@ -20,7 +20,7 @@ def run_simulation(k):
 
     scenario = HoloOceanScenarios.Scenario("__", f"64-tank-Map-{mission}", "DatasetSonar", 200)
     auv = HoloOceanVehicles.SphereAgent(
-        id='1',
+        id='0',
         root=f"coverage-mission-{mission}-data-mv",
         control_scheme=0,
         location=list(trajectory[0]),

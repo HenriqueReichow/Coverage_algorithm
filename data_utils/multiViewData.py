@@ -188,42 +188,45 @@ def join_images_side_by_side(image_paths, output_path="joined_image.png"):
     except Exception as e:
         print(f"Error saving image: {e}")
 
-FILE_PREFIX=f"/home/lh/Documents/coverage-data/"
+FILE_PREFIX=f"/home/lh/Desktop/Coverage_algorithm/coverage-mission-1-data-mv/"
 a=0
 file_list_imgs=[]
 file_list_masks=[]
 if __name__ == "__main__":
-    missions=[1,3]
-    #missions=[1]
+    #missions=[1,3]
+    missions=[1]
+    m = 1
     sonar_model="P900"
-    for m in missions:
-        with open(f"{FILE_PREFIX}mission{m}.csv", newline='') as f:
-            reader = csv.reader(f)
-            mission_metadata = list(reader)
-            mission_metadata.pop(0)
-        #mission_met=mission_metadata[0:1]    
-        for mission in mission_metadata:
-            a=0
-            #if (int(mission[6])-1)%3>0:
-            #    file_list.clear()
-            #    file_list=[f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-2}.png",
-            #        f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-3}.png",
-            #        f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-4}.png"]
-            #    stack_images_vertically(file_list,f"masks/{m}-{sonar_model}-{mission[0]}-{int((int(mission[6])-1)/3)+1}.png")
-            #a=0
-            #file_list.clear()
+    for obj in range(30,40):
+        if obj != 36:
+            with open(f"/home/lh/Desktop/Coverage_algorithm/obj_locations/mission{m}.csv", newline='') as f:
+                reader = csv.reader(f)
+                mission_metadata = list(reader)
+                mission_metadata.pop(0)
+                # #mission_met=mission_metadata[0:1]    
+                # for mission in mission_metadata:
+                #     a=0
+                #     #if (int(mission[6])-1)%3>0:
+                #     #    file_list.clear()
+                #     #    file_list=[f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-2}.png",
+                #     #        f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-3}.png",
+                #     #        f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{int(mission[6])-4}.png"]
+                #     #    stack_images_vertically(file_list,f"masks/{m}-{sonar_model}-{mission[0]}-{int((int(mission[6])-1)/3)+1}.png")
+                #     #a=0
+                #     #file_list.clear()
+                a = 0
+                for i in range(303):
+                    #for a in range(3):
+                    file_img=f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-obj{obj}/1-sphere-0-data/Cartesian-images/{i}.png"
+                    file_list_imgs.append(file_img)
+                    file_mask=f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-obj{obj}/1-sphere-0-data/GT-images/{i}.png"
+                    file_list_masks.append(file_mask)
 
-            for i in range(3*(int(mission[6]))):
-                #for a in range(3):
-                file_img=f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-obj{obj}/{m}-sphere-0-data/Cartesian-images/{i}.png"
-                file_list_imgs.append(file_img)
-                file_mask=f"{FILE_PREFIX}Sonar-Dataset-mission-{m}-{sonar_model}-pitch/auv-{mission[0]}/GT-images/{i}.png"
-                file_list_masks.append(file_mask)
-                if len(file_list_imgs)==3:
-                    combine_images_pixelwise(file_list_imgs,f"imgs_combined/{m}-{sonar_model}-{mission[0]}-{a}.png")
-                    combine_images_pixelwise(file_list_masks,f"masks_combined/{m}-{sonar_model}-{mission[0]}-{a}.png")
-                    stack_images_vertically(file_list_imgs,f"imgs_stack/{m}-{sonar_model}-{mission[0]}-{a}.png")
-                    stack_images_vertically(file_list_masks,f"masks_stack/{m}-{sonar_model}-{mission[0]}-{a}.png")
-                    file_list_imgs.clear()
-                    file_list_masks.clear()
-                    a=a+1
+                    if len(file_list_imgs)==3:
+                        combine_images_pixelwise(file_list_imgs,f"/home/lh/Desktop/Coverage_algorithm/imgs_combined/{m}-{sonar_model}-{obj}-{a}.png")
+                        combine_images_pixelwise(file_list_masks,f"/home/lh/Desktop/Coverage_algorithm/masks_combined/{m}-{sonar_model}-{obj}-{a}.png")
+                        stack_images_vertically(file_list_imgs,f"/home/lh/Desktop/Coverage_algorithm/imgs_stack/{m}-{sonar_model}-{obj}-{a}.png")
+                        stack_images_vertically(file_list_masks,f"/home/lh/Desktop/Coverage_algorithm/masks_stack/{m}-{sonar_model}-{obj}-{a}.png")
+                        file_list_imgs.clear()
+                        file_list_masks.clear()
+                        a=a+1

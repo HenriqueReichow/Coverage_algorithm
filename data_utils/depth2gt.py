@@ -73,20 +73,21 @@ bin_to_gt(gt_filepath,gt_file, xyz_file,sonar)
 missions=[1]
 sonar="P900"
 
-for id in tqdm.tqdm(missions):
+for obj_id in range(8,40):
 
-    mission_id=id
+    if obj_id != 36:
+        mission_id=1
 
-    with open('mission'+str(mission_id)+'.csv', newline='') as f:
-        reader = csv.reader(f)
-        mission_metadata = list(reader)
-        mission_metadata.pop(0)
+        with open('/home/lh/Desktop/Coverage_algorithm/obj_locations/mission'+str(mission_id)+'.csv', newline='') as f:
+            reader = csv.reader(f)
+            mission_metadata = list(reader)
+            mission_metadata.pop(0)
 
-    mission_met=mission_metadata
-    for mission in tqdm.tqdm(mission_met):
-        for i in tqdm.tqdm(range(101)):
+        mission_met=mission_metadata
+        #for mission in tqdm.tqdm(mission_met):
+        for i in tqdm.tqdm(range(303)):
             #npy_file = (f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/GT-bin/{i}.npy")  # Replace with your .npy file path
-            npy_file = (f"coverage-mission-{mission_id}-data/Sonar-Dataset-mission-1-obj{mission_id}/{mission_id}-sphere-0-data/GT-folder/{i}.npy")  # Replace with your .npy file path
+            npy_file = (f"/home/lh/Desktop/Coverage_algorithm/coverage-mission-{mission_id}-data-mv/Sonar-Dataset-mission-{mission_id}-obj{obj_id}/1-sphere-0-data/GT-folder/{i}.npy")  # Replace with your .npy file path
 
             #try:
             #    os.mkdir(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/Point-cloud")
@@ -96,13 +97,17 @@ for id in tqdm.tqdm(missions):
             #    os.mkdir(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/GT-images")
             #except FileExistsError:
             #    pass
-            #xyz_file=(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/Point-cloud/{i}.xyz")  # Replace with desired output path
+            
+            xyz_file=(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-Point-cloud/{i}.xyz")  # Replace with desired output path
             #gt_file=(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/GT-images/{i}.png")
-            gt_file=(f"/home/lh/Desktop/Coverage_algorithm/experiments-unet/mission1-inference/obj-0/{i}.png")
+            if not os.path.exists(f"/home/lh/Desktop/Coverage_algorithm/coverage-mission-{mission_id}-data-mv/Sonar-Dataset-mission-{mission_id}-obj{obj_id}/1-sphere-0-data/GT-images"):
+                os.makedirs(f"/home/lh/Desktop/Coverage_algorithm/coverage-mission-{mission_id}-data-mv/Sonar-Dataset-mission-{mission_id}-obj{obj_id}/1-sphere-0-data/GT-images")
+
+            gt_file=(f"/home/lh/Desktop/Coverage_algorithm/coverage-mission-1-data-mv/Sonar-Dataset-mission-1-obj{obj_id}/1-sphere-0-data/GT-images/{i}.png")
             
             #gt_file=(f"/home/guilherme/Documents/Pytorch-UNet/data/masks/{mission_id}-{sonar}-auv-{mission[0]}-{i}.png")
             try:
-                bin_to_gt(npy_file,gt_file, sonar)
+                bin_to_gt(npy_file,gt_file, xyz_file,sonar)
                 #cp_bin(npy_file,(f"/home/guilherme/Documents/SEE-Dataset/Sonar-Dataset-mission-{mission_id}-{sonar}/auv-{mission[0]}/GT-bin/{i}.npy"))
             except:
                 pass
